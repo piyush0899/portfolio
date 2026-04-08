@@ -393,4 +393,123 @@
     });
   }
 
+  /* ════════════════════════════════
+     BACKEND API BASE URL
+     Local:      http://localhost:8081
+     Production: set window.PORTFOLIO_API before this script, or update below
+  ════════════════════════════════ */
+  var API = window.PORTFOLIO_API || "https://portfolio-backend-piyush.up.railway.app";
+
+  /* ════════════════════════════════
+     VISITOR COUNTER
+  ════════════════════════════════ */
+  var visitEl = document.getElementById("visitCount");
+  fetch(API + "/api/visits", { method: "POST" })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (visitEl && d.visits) {
+        visitEl.textContent = d.visits.toLocaleString();
+      }
+    })
+    .catch(function () {
+      if (visitEl) visitEl.textContent = "—";
+    });
+
+  /* ════════════════════════════════
+     CONTACT FORM SUBMISSION
+  ════════════════════════════════ */
+  var contactForm = document.getElementById("contactForm");
+  var feedback    = document.getElementById("formFeedback");
+  var submitBtn   = document.getElementById("formSubmit");
+
+  if (contactForm) {
+    contactForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+
+      var nameEl  = contactForm.querySelector("[name='name']");
+      var emailEl = contactForm.querySelector("[name='email']");
+      var msgEl   = contactForm.querySelector("[name='message']");
+
+      /* Clear previous states */
+      [nameEl, emailEl, msgEl].forEach(function (el) { el.classList.remove("invalid"); });
+      feedback.className = "form-feedback";
+      feedback.classList.remove("show");
+
+      /* Client-side validation */
+      var valid = true;
+      if (!nameEl.value.trim())  { nameEl.classList.add("invalid");  valid = false; }
+      if (!emailEl.value.trim() || !emailEl.value.includes("@")) {
+        emailEl.classList.add("invalid"); valid = false;
+      }
+      if (!msgEl.value.trim())   { msgEl.classList.add("invalid");   valid = false; }
+      if (!valid) {
+        showFeedback("error", "Please fill in all fields correctly.");
+        return;
+      }
+
+      /* Loading state */
+      submitBtn.classList.add("loading");
+      submitBtn.disabled = true;
+
+      /* Add spinner element if not present */
+      if (!submitBtn.querySelector(".spinner")) {
+        var sp = document.createElement("span");
+        sp.className = "spinner";
+        submitBtn.appendChild(sp);
+      }
+
+      var payload = JSON.stringify({
+        name:    nameEl.value.trim(),
+        email:   emailEl.value.trim(),
+        message: msgEl.value.trim()
+      });
+
+      /* 5 second timeout so we don't hang if backend is down */
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, 5000);
+
+      fetch(API + "/api/contact", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    payload,
+        signal:  controller.signal
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          clearTimeout(timer);
+          if (res.ok) {
+            showFeedback("success", res.data.reply || "Message sent! I'll get back to you soon.");
+            contactForm.reset();
+          } else {
+            showFeedback("error", res.data.error || "Something went wrong. Please try again.");
+          }
+        })
+        .catch(function () {
+          clearTimeout(timer);
+          /* Backend offline — open a pre-filled Gmail compose window */
+          var name    = nameEl.value.trim();
+          var email   = emailEl.value.trim();
+          var message = msgEl.value.trim();
+          var subject = encodeURIComponent("Portfolio Contact from " + name);
+          var body    = encodeURIComponent(
+            "Name: " + name + "\nEmail: " + email + "\n\nMessage:\n" + message
+          );
+          var mailtoLink = "mailto:singhalpiyush614@gmail.com?subject=" + subject + "&body=" + body;
+          window.location.href = mailtoLink;
+          showFeedback("success", "Opening your email app to send directly...");
+        })
+        .finally(function () {
+          submitBtn.classList.remove("loading");
+          submitBtn.disabled = false;
+        });
+    });
+  }
+
+  function showFeedback(type, msg) {
+    if (!feedback) return;
+    feedback.className = "form-feedback " + type;
+    feedback.textContent = msg;
+    requestAnimationFrame(function () { feedback.classList.add("show"); });
+  }
+
 })();
